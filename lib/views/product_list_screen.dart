@@ -4,11 +4,13 @@ import '../view_models/product_notifier.dart';
 import 'widgets/product_tile.dart';
 
 class ProductListScreen extends ConsumerStatefulWidget {
+  const ProductListScreen({super.key});
+
   @override
-  _ProductListScreenState createState() => _ProductListScreenState();
+  ProductListScreenState createState() => ProductListScreenState();
 }
 
-class _ProductListScreenState extends ConsumerState<ProductListScreen> {
+class ProductListScreenState extends ConsumerState<ProductListScreen> {
   late ScrollController _scrollController;
   int _currentPage = 0;
   bool _isFetching = false; // Prevent duplicate fetches
@@ -20,7 +22,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
     _scrollController.addListener(_onScroll);
 
     // Fetch the initial page
-    ref.read(productNotifierProvider.notifier).fetchProducts(_currentPage);
+    ref.read(productNotifierProvider.notifier).fetchInitialProducts(_currentPage);
   }
 
   void _onScroll() {
@@ -33,7 +35,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
       _currentPage++;
       ref
           .read(productNotifierProvider.notifier)
-          .fetchProducts(_currentPage)
+          .fetchMoreProducts(_currentPage)
           .then((_) => _isFetching = false)
           .catchError((_) => _isFetching = false); // Reset fetching state on error
     }
@@ -93,7 +95,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
             ],
           );
         },
-      )
+      ),
     );
   }
 }
