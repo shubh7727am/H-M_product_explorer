@@ -132,8 +132,6 @@ final response = await http.get(
 ---
 
 
-## Evaluation Highlights
-
 This app demonstrates:
 
 - **Technical Proficiency**: Implementation of **Flutter** best practices and API integration.
