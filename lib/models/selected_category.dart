@@ -1,4 +1,5 @@
 class SelectedCate{
   List<dynamic> tagCodes ;
-  SelectedCate({required this.tagCodes});
+  String name ;
+  SelectedCate({required this.tagCodes , required this.name});
 }

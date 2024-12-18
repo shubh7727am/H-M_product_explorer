@@ -14,14 +14,21 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
   final CategoryNotifier _categoryNotifier;
   final SelectedCateNotifier _selectedCateNotifier;
 
-  ProductNotifier(this._productService, this._categoryNotifier, this._selectedCateNotifier) : super(const AsyncValue.loading());
+  // To keep track of the last fetched tag codes
+  List<dynamic> _lastFetchedTagCodes = [];
 
-  Future<void> fetchInitialProducts(int page) async {
+  ProductNotifier(this._productService, this._categoryNotifier, this._selectedCateNotifier)
+      : super(const AsyncValue.loading()) {
+    _fetchInitialProducts(0); // Fetch initial products when notifier is created
+  }
+
+  Future<void> _fetchInitialProducts(int page) async {
+    state = const AsyncValue.loading();
     await _initializeIfNeeded();
-
     try {
       final newProducts = await _productService.fetchProducts(page, _selectedCateNotifier.state.tagCodes);
       state = AsyncValue.data(newProducts); // Set initial products directly
+      _lastFetchedTagCodes = _selectedCateNotifier.state.tagCodes;
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
     }
@@ -29,6 +36,12 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 
   Future<void> fetchMoreProducts(int page) async {
     await _initializeIfNeeded();
+
+    if (_lastFetchedTagCodes != _selectedCateNotifier.state.tagCodes) {
+      // If the tag codes have changed, fetch initial products again
+      await _fetchInitialProducts(0);
+      return;
+    }
 
     try {
       final newProducts = await _productService.fetchProducts(page, _selectedCateNotifier.state.tagCodes);
@@ -65,7 +78,6 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       if (e is RangeError) {
         // If error is RangeError, preserve previous state
         state = AsyncValue.data(state.value ?? []); // Keep existing data
-        print('No more items found: $e');
       } else {
         state = AsyncValue.error(e, stackTrace);
       }

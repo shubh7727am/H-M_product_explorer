@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/theme/theme_provider.dart';
 import '../view_models/product_notifier.dart';
 import 'widgets/product_tile.dart';
 
+// Main screen to display a list of products with infinite scrolling functionality
 class ProductListScreen extends ConsumerStatefulWidget {
   const ProductListScreen({super.key});
 
@@ -11,88 +13,149 @@ class ProductListScreen extends ConsumerStatefulWidget {
 }
 
 class ProductListScreenState extends ConsumerState<ProductListScreen> {
-  late ScrollController _scrollController;
-  int _currentPage = 0;
-  bool _isFetching = false; // Prevent duplicate fetches
+  late ScrollController _scrollController; // Controller to track scroll position
+  int _currentPage = 0; // Current page for pagination
+  bool _isFetching = false; // Flag to prevent duplicate fetches
+  bool _hasMoreItems = true; // Indicates if there are more items to fetch
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
-    _scrollController.addListener(_onScroll);
-
-    // Fetch the initial page
-    ref.read(productNotifierProvider.notifier).fetchInitialProducts(_currentPage);
+    _scrollController = ScrollController(); // Initialize the scroll controller
+    _scrollController.addListener(_onScroll); // Add a listener for scroll events
   }
 
+  // Triggered when the user scrolls
   void _onScroll() {
-    // Trigger fetch when approaching the bottom
+    // Check if we're near the bottom of the list and not currently fetching data
     if (!_isFetching &&
         _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent -
-                _scrollController.position.viewportDimension) {
-      _isFetching = true;
-      _currentPage++;
-      ref
+            _scrollController.position.maxScrollExtent - 200) {
+      _fetchMoreProducts(); // Fetch the next batch of products
+    }
+  }
+
+  // Fetch more products from the backend
+  Future<void> _fetchMoreProducts() async {
+    if (!_hasMoreItems) return; // Stop fetching if no more items are available
+
+    setState(() {
+      _isFetching = true; // Set fetching flag to true
+    });
+
+    try {
+      _currentPage++; // Increment the page number
+      // Fetch products using the notifier
+      await ref
           .read(productNotifierProvider.notifier)
-          .fetchMoreProducts(_currentPage)
-          .then((_) => _isFetching = false)
-          .catchError((_) => _isFetching = false); // Reset fetching state on error
+          .fetchMoreProducts(_currentPage);
+    } catch (e) {
+      // If no more items are available, update the state
+      if (e.toString() == 'No more items found') {
+        setState(() {
+          _hasMoreItems = false;
+        });
+      }
+    } finally {
+      setState(() {
+        _isFetching = false; // Reset the fetching flag
+      });
     }
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _scrollController.dispose(); // Dispose the scroll controller
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final productState = ref.watch(productNotifierProvider);
+    final productState = ref.watch(productNotifierProvider); // Watch the product state
+    final themeMode = ref.watch(themeProvider); // Watch the theme mode
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        scrolledUnderElevation: 0,
-        title: Text('Product List'),
-        backgroundColor: Colors.white,
+        scrolledUnderElevation: 0, // Remove shadow under the app bar
+        title: const Text('Product List'), // Title of the screen
         elevation: 0,
+        actions: [
+          IconButton(
+            // Theme toggle button
+            icon: Icon(themeMode == ThemeMode.dark ? Icons.wb_sunny : Icons.nights_stay),
+            onPressed: () {
+              ref.read(themeProvider.notifier).toggleTheme(); // Toggle theme
+            },
+          ),
+        ],
       ),
       body: productState.when(
         data: (products) {
+          // Display when data is available
+          if (products.isEmpty) {
+            return const Center(
+              child: Text(
+                '⚠️ No products found', // Message when no products are found
+                style: TextStyle(fontSize: 24, color: Colors.grey),
+              ),
+            );
+          }
+
           return LayoutBuilder(
             builder: (context, constraints) {
-              int crossAxisCount = 2;
-              if (constraints.maxWidth > 600) crossAxisCount = 3;
-              if (constraints.maxWidth > 900) crossAxisCount = 4;
+              // Adjust grid layout based on screen size
+              int crossAxisCount = 2; // Default to 2 columns
+              if (constraints.maxWidth > 600) crossAxisCount = 3; // Larger screens: 3 columns
+              if (constraints.maxWidth > 900) crossAxisCount = 4; // Even larger screens: 4 columns
 
               return GridView.builder(
-                controller: _scrollController,
+                controller: _scrollController, // Attach the scroll controller
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 20.0,
-                  mainAxisSpacing: 40.0,
+                  crossAxisCount: crossAxisCount, // Set the number of columns
+                  crossAxisSpacing: 20.0, // Spacing between columns
+                  mainAxisSpacing: 40.0, // Spacing between rows
                 ),
-                itemCount: products.length,
+                itemCount: products.length + (_hasMoreItems || _isFetching ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final product = products[index];
-                  return ProductTile(product: product);
+                  if (index >= products.length) {
+                    // Footer: Show loading spinner or "No more items" message
+                    if (!_hasMoreItems) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text(
+                            'No more items found', // End of list message
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      );
+                    }
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator(), // Loading spinner
+                      ),
+                    );
+                  }
+
+                  final product = products[index]; // Fetch product at the current index
+                  return ProductTile(product: product); // Display the product
                 },
               );
             },
           );
         },
-        loading: () => Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator()), // Show loader while data is loading
         error: (error, stack) {
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (error == 'No more items found')
-                Text('No more items found', style: TextStyle(color: Colors.grey)),
-              Text('Error: $error'),
-              Text('Stack trace: $stack'),
-            ],
+          // Display error message
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Error: $error', style: TextStyle(color: Colors.red)),
+                Text('Stack trace: $stack'), // Show stack trace for debugging
+              ],
+            ),
           );
         },
       ),
